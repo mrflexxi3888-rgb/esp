@@ -15,6 +15,107 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
+        /* --- LOGIN PAGE --- */
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+            padding: 20px;
+        }
+        
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 420px;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .login-logo {
+            font-size: 32px;
+            font-weight: 800;
+            color: #4361ee;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+        
+        .login-subtitle {
+            color: #6b7280;
+            margin-bottom: 30px;
+            font-size: 15px;
+        }
+        
+        .login-input {
+            width: 100%;
+            padding: 16px 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+        
+        .login-input:focus {
+            outline: none;
+            border-color: #4361ee;
+            box-shadow: 0 0 0 4px rgba(67, 97, 238, 0.1);
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 16px;
+            background: #4361ee;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        
+        .login-btn:hover {
+            background: #3a56d4;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(67, 97, 238, 0.3);
+        }
+        
+        .login-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .error-message {
+            color: #ef4444;
+            background: #fef2f2;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .show {
+            display: block;
+        }
+        
         :root {
             --primary: #4361ee;
             --primary-hover: #3a56d4;
@@ -199,6 +300,33 @@
     </style>
 </head>
 <body>
+
+    <!-- LOGIN PAGE -->
+    <div id="login-page" class="login-container">
+        <div class="login-card">
+            <div class="login-logo">
+                <i class="fas fa-gamepad"></i>
+                <span>KHELO BD</span>
+            </div>
+            <h2 class="login-title">Admin Login</h2>
+            <p class="login-subtitle">Enter your credentials to access the dashboard</p>
+            
+            <div id="login-error" class="error-message">
+                Invalid username or password
+            </div>
+            
+            <input type="email" id="login-username" class="login-input" placeholder="Admin Email" autocomplete="email">
+            <input type="password" id="login-password" class="login-input" placeholder="Password" autocomplete="current-password">
+            <button id="login-btn" class="login-btn" onclick="attemptLogin()">Login</button>
+            
+            <div class="mt-4 small text-muted">
+                Use your Firebase admin account credentials
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN ADMIN PANEL (HIDDEN BY DEFAULT) -->
+    <div id="admin-panel" class="hidden">
 
     <div id="loading" class="loading-overlay hidden">
         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
@@ -679,12 +807,13 @@
             </div>
         </div>
     </div>
+    </div> <!-- Close admin-panel div -->
 
     <!-- SCRIPTS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, push, update, get, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+        import { getDatabase, ref, set, onValue, push, update, get, remove, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
         const firebaseConfig = {
   apiKey: "AIzaSyB5dta1e5UXDI2FJHu7wHmYuXlahnkgK4A",
@@ -702,12 +831,44 @@
         // ImgBB API Key
         const IMGBB_API_KEY = "818e0dc0dede460cf04c06e8ea4ea272";
 
+        // --- AUTHENTICATION SYSTEM (Firebase-based) ---
+        import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        
+        const auth = getAuth(app);
         let allMatches = {}, allUsers = {}, allCategories = {};
         let modals = {};
         let mainChart = null, pieChart = null;
         let activeImageTabs = { cat: 'upload', ban: 'upload' };
+        let isAuthenticated = false;
 
+        // Check if already logged in
         window.onload = () => {
+            // Listen for auth state changes
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    // User is signed in
+                    showAdminPanel();
+                    initAdminPanel();
+                } else {
+                    // User is signed out
+                    showLoginPage();
+                }
+            });
+        };
+        
+        function showLoginPage() {
+            document.getElementById('login-page').classList.remove('hidden');
+            document.getElementById('admin-panel').classList.add('hidden');
+            isAuthenticated = false;
+        }
+        
+        function showAdminPanel() {
+            document.getElementById('login-page').classList.add('hidden');
+            document.getElementById('admin-panel').classList.remove('hidden');
+            isAuthenticated = true;
+        }
+        
+        function initAdminPanel() {
             modals.match = new bootstrap.Modal(document.getElementById('matchModal'));
             modals.cat = new bootstrap.Modal(document.getElementById('catModal'));
             modals.banner = new bootstrap.Modal(document.getElementById('bannerModal'));
@@ -716,7 +877,98 @@
 
             fetchDashboardData();
             fetchSettings();
+        }
+        
+        window.attemptLogin = () => {
+            const email = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+            const errorDiv = document.getElementById('login-error');
+            const loginBtn = document.getElementById('login-btn');
+            
+            // Reset UI
+            errorDiv.classList.remove('show');
+            loginBtn.disabled = true;
+            loginBtn.innerText = 'Logging in...';
+            
+            // Simple validation
+            if (!email || !password) {
+                showError("Please enter both email and password");
+                resetLoginButton();
+                return;
+            }
+            
+            // Firebase Authentication
+            signInWithEmailAndPassword(auth, email, password)
+                .then((userCredential) => {
+                    // Login successful
+                    const user = userCredential.user;
+                    console.log("Login successful:", user.email);
+                    // Admin panel will be shown automatically by auth state listener
+                    resetLoginButton();
+                })
+                .catch((error) => {
+                    const errorCode = error.code;
+                    const errorMessage = error.message;
+                    console.error("Login error:", errorCode, errorMessage);
+                    
+                    if (errorCode === 'auth/invalid-credential') {
+                        showError("Invalid email or password");
+                    } else if (errorCode === 'auth/too-many-requests') {
+                        showError("Too many failed attempts. Please try again later.");
+                    } else {
+                        showError("Login failed: " + errorMessage);
+                    }
+                    resetLoginButton();
+                });
         };
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('login-error');
+            errorDiv.innerText = message;
+            errorDiv.classList.add('show');
+        }
+        
+        function resetLoginButton() {
+            const loginBtn = document.getElementById('login-btn');
+            loginBtn.disabled = false;
+            loginBtn.innerText = 'Login';
+        }
+        
+        // Handle Enter key in login form
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !isAuthenticated) {
+                attemptLogin();
+            }
+        });
+        
+        // Logout function
+        window.logout = () => {
+            if (confirm("Are you sure you want to logout?")) {
+                signOut(auth).then(() => {
+                    console.log("Logged out successfully");
+                    showLoginPage();
+                    // Clear form fields
+                    document.getElementById('login-username').value = "";
+                    document.getElementById('login-password').value = "";
+                    document.getElementById('login-error').classList.remove('show');
+                }).catch((error) => {
+                    console.error("Logout error:", error);
+                });
+            }
+        };
+        
+        // Add logout button to sidebar
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarMenu = document.querySelector('.nav-menu');
+            if (sidebarMenu) {
+                const logoutDiv = document.createElement('div');
+                logoutDiv.className = 'nav-link';
+                logoutDiv.innerHTML = '<i class="fas fa-sign-out-alt"></i> Logout';
+                logoutDiv.onclick = logout;
+                logoutDiv.style.marginTop = 'auto';
+                sidebarMenu.appendChild(logoutDiv);
+            }
+        });
 
         // --- UI UTILS ---
         window.toggleSidebar = () => {
